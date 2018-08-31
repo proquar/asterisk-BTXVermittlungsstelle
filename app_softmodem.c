@@ -20,7 +20,7 @@
 
 #include "asterisk.h"
 
-ASTERISK_FILE_VERSION(__FILE__, "$Revision$")
+//ASTERISK_FILE_VERSION(__FILE__, "$Revision$")
 
 #include <string.h>
 #include <stdlib.h>
@@ -231,16 +231,16 @@ static void modem_put_bit(void *user_data, int bit) {
 									byte |= (1<<i);
 							}
 						}
-/*						if ( paritybits ) {
-							// ignore parity check on receipt; just drop the bit
-							// TODO - check it and decide what to do if it's wrong..
-						}
-*/
-						send(rx->sock, &byte, 1, 0);
-							// TODO - why does this increment by 10?
+
+						if ( !paritybits || ( paritybits &&
+									( rx->bitbuffer[(rx->readpos + databits + 1)%MODEM_BITBUFFER_SIZE] ==
+										( (rx->session->paritytype == 2) ^ __builtin_parity(byte) ) ) ) ) {
+
+							send(rx->sock, &byte, 1, 0);
+						} // else invalid parity, ignore byte
+						// TODO - why does this increment by 10?
 						rx->readpos=(rx->readpos+10)%MODEM_BITBUFFER_SIZE;
 						rx->fill-=10;
-
 					} else {	// no valid framing (no stopbit), remove first bit and maybe try again
 						rx->fill--;
 						rx->readpos++;
@@ -286,7 +286,7 @@ static int modem_get_bit(void *user_data) {
 				// new data on socket, we put that byte into our bitbuffer
 				for (i=0; i<(databits+paritybits+stopbits); i++) {
 					if (paritybits && (i == databits) ) {
-						tx->bitbuffer[tx->writepos] = /*(tx->session->paritytype == 1) -*/ __builtin_parity( byte);
+						tx->bitbuffer[tx->writepos] = (tx->session->paritytype == 2) ^ __builtin_parity( byte);
 					} else if ( i >= databits )
 						tx->bitbuffer[tx->writepos]=1;	// stopbits
 					else {	// databits
@@ -320,7 +320,7 @@ static int modem_get_bit(void *user_data) {
 				if (tx->session->sendnull) { // send null byte
 					for (i=0; i<(databits+paritybits+stopbits); i++) {
 						if (paritybits && (i == databits) )
-							tx->bitbuffer[tx->writepos] = /*(tx->session->paritytype == 1) -*/ __builtin_parity( 0 );	// yes I know!
+							tx->bitbuffer[tx->writepos] = (tx->session->paritytype == 2) ^ __builtin_parity( 0 );	// yes I know!
 						else if (i>=databits) tx->bitbuffer[tx->writepos]=1;	//stopbits
 						else tx->bitbuffer[tx->writepos]=0; //databits
 						tx->writepos++;
